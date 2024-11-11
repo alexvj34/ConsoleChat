@@ -15,7 +15,6 @@ public class ChatServer {
         try (ServerSocket serverSocket = new ServerSocket(PORT)) {
             System.out.println("Сервер запущен. Ожидание подключения...");
 
-
             new Thread(ChatServer::handleServerCommands).start();
 
             while (true) {
@@ -42,6 +41,10 @@ public class ChatServer {
                         user.setRole("ADMIN");
                         user.sendMessage("Вы получили права администратора.");
                         System.out.println("Пользователь " + username + " назначен администратором.");
+
+
+                        int userId = Database.getUserId(user.getUsername());
+                        Database.addRole(userId, "ADMIN");
                     } else {
                         System.out.println("Пользователь " + username + " не найден.");
                     }
@@ -71,11 +74,44 @@ public class ChatServer {
                 out = new PrintWriter(clientSocket.getOutputStream(), true);
 
 
-                out.println("Введите ваше имя:");
-                username = in.readLine();
+                out.println("Введите /register для регистрации или /login для входа:");
 
-                user = new User(username, "USER", out);
-                users.put(username, user);
+                String command = in.readLine();
+
+                if (command.equals("/register")) {
+                    out.println("Введите ваше имя для регистрации:");
+                    username = in.readLine();
+                    out.println("Введите ваш пароль:");
+                    String password = in.readLine();
+
+
+                    if (Database.registerUser(username, password)) {
+                        out.println("Регистрация прошла успешно!");
+                        user = new User(username, "user", out);
+                        users.put(username, user);
+                    } else {
+                        out.println("Пользователь с таким логином уже существует.");
+                        return;
+                    }
+                } else if (command.equals("/login")) {
+                    out.println("Введите ваше имя:");
+                    username = in.readLine();
+                    out.println("Введите ваш пароль:");
+                    String password = in.readLine();
+
+
+                    if (Database.authenticateUser(username, password)) {
+                        out.println("Авторизация успешна!");
+
+                        int userId = Database.getUserId(username);
+                        String role = Database.getRole(userId);
+                        user = new User(username, role, out);
+                        users.put(username, user);
+                    } else {
+                        out.println("Неверное имя пользователя или пароль.");
+                        return;
+                    }
+                }
 
                 broadcastMessage(username + " присоединился к чату.");
 
@@ -128,11 +164,7 @@ public class ChatServer {
                 userToKick.sendMessage("Вы были кикнуты администратором.");
                 users.remove(username);
                 broadcastMessage(username + " был кикнут из чата.");
-                try {
-                    userToKick.getOut().close();
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
+                userToKick.getOut().close();
             } else {
                 out.println("Пользователь " + username + " не найден.");
             }
